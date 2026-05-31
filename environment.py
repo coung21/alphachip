@@ -110,9 +110,7 @@ class ChipFloorplanEnv(gym.Env):
             ),
             "metadata": spaces.Box(0.0, 1.0, (4,), np.float32),
             # Action mask: True = valid placement
-            "action_mask": spaces.Box(
-                0, 1, (self.n_actions,), np.bool_
-            ),
+            "action_mask": spaces.MultiBinary(self.n_actions),
         })
  
         # Runtime state (khởi tạo bởi reset)
@@ -140,7 +138,10 @@ class ChipFloorplanEnv(gym.Env):
         # Place fixed blocks
         for i, b in enumerate(self.blocks):
             if (b.is_fixed or b.is_port) and b.x is not None:
-                col, row = self.pg.xy_to_cell(b.x, b.y)
+                assert b.y is not None
+                bx = float(b.x)
+                by = float(b.y)
+                col, row = self.pg.xy_to_cell(bx, by)
                 self.pg.place(i + 1, col, row, b)
  
         self.step_idx = 0
@@ -151,6 +152,7 @@ class ChipFloorplanEnv(gym.Env):
  
     def step(self, action: int) -> Tuple[Dict, float, bool, bool, Dict]:
         assert not self._done, "Call reset() before stepping."
+        assert self.pg is not None
  
         block_idx = self.placement_order[self.step_idx]
         block = self.blocks[block_idx]
@@ -215,6 +217,7 @@ class ChipFloorplanEnv(gym.Env):
             if self.step_idx < self.n_movable
             else -1
         )
+        assert self.pg is not None
  
         # ── Node features ─────────────────────────────────────────────
         # [w, h, area, cx, cy, is_placed, is_port, is_current]
@@ -246,7 +249,8 @@ class ChipFloorplanEnv(gym.Env):
  
         # ── Action mask ───────────────────────────────────────────────
         if cur_idx >= 0:
-            mask = self.pg.get_action_mask(self.blocks[cur_idx])
+            placed_blocks = [b for i, b in enumerate(self.blocks) if b.is_placed and i != cur_idx]
+            mask = self.pg.get_action_mask(self.blocks[cur_idx], placed_blocks=placed_blocks)
         else:
             mask = np.zeros(self.n_actions, dtype=np.bool_)
  
@@ -291,7 +295,7 @@ class ChipFloorplanEnv(gym.Env):
         max_w = max(weights) if weights else 1.0
  
         # Pad hoặc truncate đến max_edges
-        def pad(arr, fill=0):
+        def pad(arr, fill: float = 0.0):
             arr = np.array(arr)
             if len(arr) >= self.max_edges:
                 return arr[:self.max_edges]
@@ -314,6 +318,7 @@ class ChipFloorplanEnv(gym.Env):
     def render(self):
         if self.render_mode != "human":
             return
+        assert self.pg is not None
         syms = "·" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         print("┌" + "─" * self.grid_cols + "┐")
         for r in range(self.grid_rows - 1, -1, -1):  # y=0 ở bottom
