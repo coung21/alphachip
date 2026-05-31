@@ -5,3 +5,4 @@
 *.png
 /checkpoints
 README_WANDB_EXPORT.md
+notebooks
