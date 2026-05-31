@@ -1,0 +1,7 @@
+/__pycache__
+/data
+/wandb
+# ignore all png file
+*.png
+/checkpoints
+README_WANDB_EXPORT.md
