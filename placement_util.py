@@ -93,8 +93,9 @@ class PlacementGrid:
         """Tính (col_end, row_end) của block nếu đặt tại (col, row)
            Clamp để block không vượt quá canvas        
         """
-        bw = max(1, int(np.ceil(block.width / self.cell_w)))
-        bh = max(1, int(np.ceil(block.height / self.cell_h)))
+        import math
+        bw = max(1, math.ceil(block.width / self.cell_w))
+        bh = max(1, math.ceil(block.height / self.cell_h))
 
         col = min(col, self.cols - bw)
         row = min(row, self.rows - bh)
@@ -103,52 +104,13 @@ class PlacementGrid:
         row = max(row, 0)
 
         return col, row, col + bw, row + bh
-
-    def candidate_xy(self, col: int, row: int, block: Block) -> Tuple[float, float]:
-        """Bottom-left coordinates for placing block at the given cell."""
-        c0, r0, _, _ = self.block_cells(col, row, block)
-        x = (c0 + 0.5) * self.cell_w - block.width / 2
-        y = (r0 + 0.5) * self.cell_h - block.height / 2
-        x = float(np.clip(x, 0.0, 1.0 - block.width))
-        y = float(np.clip(y, 0.0, 1.0 - block.height))
-        return x, y
-
-    @staticmethod
-    def _rects_overlap(a: Block, b: Block) -> bool:
-        if a.x is None or a.y is None or b.x is None or b.y is None:
-            return False
-        return not (
-            a.x + a.width <= b.x or
-            b.x + b.width <= a.x or
-            a.y + a.height <= b.y or
-            b.y + b.height <= a.y
-        )
     
-    def is_valid(
-        self,
-        col: int,
-        row: int,
-        block: Block,
-        placed_blocks: Optional[List[Block]] = None,
-    ) -> bool:
+    def is_valid(self, col: int, row: int, block: Block) -> bool:
         """Kiểm tra nếu block có thể đặt tại (col, row) mà không chồng lấn hay OOB"""
         c0, r0, c1, r1 = self.block_cells(col, row, block)
         if c1 > self.cols or r1 > self.rows:
             return False
-
-        if not bool(np.all(self.grid[r0:r1, c0:c1] == 0)):
-            return False
-
-        if placed_blocks:
-            candidate = Block(block.name, block.width, block.height)
-            candidate.x, candidate.y = self.candidate_xy(col, row, block)
-            for other in placed_blocks:
-                if other is block:
-                    continue
-                if other.is_placed and self._rects_overlap(candidate, other):
-                    return False
-
-        return True
+        return bool(np.all(self.grid[r0:r1, c0:c1] == 0))
                     
     def place(self, block_id: int, col: int, row: int, block: Block):
         """Đặt block tại (col, row) và cập nhật grid occupancy"""
@@ -159,20 +121,17 @@ class PlacementGrid:
         """Trả về occupancy map (1 nếu có block, 0 nếu trống)"""
         return (self.grid > 0).astype(np.float32)
     
-    def get_action_mask(
-        self,
-        block: Block,
-        placed_blocks: Optional[List[Block]] = None,
-    ) -> np.ndarray:
+    def get_action_mask(self, block: Block) -> np.ndarray:
         """Trả về boolen mask shape (rows*cols)"""
-        bw = max(1, int(np.ceil(block.width / self.cell_w)))
-        bh = max(1, int(np.ceil(block.height / self.cell_h)))
+        import math
+        bw = max(1, math.ceil(block.width / self.cell_w))
+        bh = max(1, math.ceil(block.height / self.cell_h))
 
         mask = np.zeros((self.rows, self.cols), dtype=bool)
 
         for r in range(self.rows - bh + 1):
             for c in range(self.cols - bw + 1):
-                if self.is_valid(c, r, block, placed_blocks=placed_blocks):
+                if self.is_valid(c, r, block):
                     mask[r, c] = True
         return mask.flatten() # (rows*cols,)
 
@@ -245,7 +204,6 @@ def compute_density(
     for b in blocks:
         if not b.is_placed:
             continue
-        assert b.x is not None and b.y is not None
         c0 = int(b.x / cw)
         c1 = min(int((b.x + b.width) / cw), grid_cols - 1)
         r0 = int(b.y / ch)
