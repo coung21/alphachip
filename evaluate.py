@@ -113,29 +113,6 @@ def visualize_layout(
             zorder=2,
         )
         ax.add_patch(rect)
-        # Label
-        ax.text(
-            b.cx, b.cy, b.name,
-            ha="center", va="center",
-            fontsize=7, fontweight="bold",
-            zorder=3,
-        )
-
-    # Draw nets (HPWL bounding box visualization)
-    for net in nets:
-        xs, ys = [], []
-        for idx in net.block_indices:
-            b = blocks[idx]
-            if b.cx is not None:
-                xs.append(b.cx); ys.append(b.cy)
-        if len(xs) >= 2:
-            for j in range(len(xs)):
-                for k in range(j + 1, len(xs)):
-                    ax.plot(
-                        [xs[j], xs[k]], [ys[j], ys[k]],
-                        "b-", alpha=0.15, linewidth=0.5 * net.weight,
-                        zorder=1,
-                    )
 
     # Metrics
     hpwl = compute_hpwl(nets, blocks)
