@@ -5,6 +5,8 @@ Evaluate model đã train: chạy greedy rollout, tính metrics, visualize layou
 """
 
 from __future__ import annotations
+import argparse
+import math
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -156,50 +158,98 @@ def visualize_layout(
     return fig
 
 
+def _infer_square_grid(n_actions: int) -> tuple[int, int]:
+    side = int(round(math.sqrt(n_actions)))
+    if side * side != n_actions:
+        raise ValueError(f"Checkpoint action count {n_actions} is not a square grid.")
+    return side, side
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  Demo: evaluate với random weights (trước training)
 # ══════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    from train import make_demo_netlist
+    parser = argparse.ArgumentParser(description="Evaluate a trained chip placement checkpoint")
+    parser.add_argument("--mode", type=str, default="auto",
+                        choices=["auto", "demo", "debug", "colab_fast", "colab_full"],
+                        help="Netlist preset to evaluate. auto infers from checkpoint shape.")
+    parser.add_argument("--data_dir", type=str, default="data/ariane")
+    parser.add_argument("--ckpt", type=str, default="checkpoints/final.pt")
+    parser.add_argument("--episodes", type=int, default=5)
+    parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--grid_cols", type=int, default=None)
+    parser.add_argument("--grid_rows", type=int, default=None)
+    args = parser.parse_args()
 
-    blocks, nets = make_demo_netlist()
+    if args.device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device = args.device
+
+    ckpt = None
+    ckpt_n_actions = None
+    if os.path.exists(args.ckpt):
+        ckpt = torch.load(args.ckpt, map_location=device)
+        state_dict = ckpt.get("model_state", ckpt)
+        actor_weight = state_dict.get("actor.weight")
+        if actor_weight is not None:
+            ckpt_n_actions = int(actor_weight.shape[0])
+
+    if args.mode == "auto":
+        if ckpt_n_actions == 1024:
+            mode = "colab_full"
+        elif ckpt_n_actions == 256:
+            mode = "colab_fast"
+        else:
+            mode = "demo"
+    else:
+        mode = args.mode
+
+    from train import load_netlist
+    blocks, nets, default_cols, default_rows = load_netlist(mode, args.data_dir)
+
+    if args.grid_cols is not None and args.grid_rows is not None:
+        grid_cols, grid_rows = args.grid_cols, args.grid_rows
+    elif ckpt_n_actions is not None:
+        grid_cols, grid_rows = _infer_square_grid(ckpt_n_actions)
+    else:
+        grid_cols, grid_rows = default_cols, default_rows
 
     env = ChipFloorplanEnv(
-        blocks=blocks, nets=nets,
-        grid_cols=16, grid_rows=16,
+        blocks=blocks,
+        nets=nets,
+        grid_cols=grid_cols,
+        grid_rows=grid_rows,
     )
 
     model = ChipPlacementModel(
         n_blocks=len(blocks),
-        n_actions=16 * 16,
+        n_actions=grid_cols * grid_rows,
         node_dim=ChipFloorplanEnv.NODE_DIM,
         edge_dim=1,
         hidden_dim=128,
         n_layers=3,
     )
 
-    # Load checkpoint nếu có
-    ckpt_path = "checkpoints/final.pt"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if os.path.exists(ckpt_path):
-        ckpt = torch.load(ckpt_path, map_location=device)
+    if ckpt is not None:
         model.load_state_dict(ckpt["model_state"])
-        print(f"Loaded checkpoint: {ckpt_path}")
+        print(f"Loaded checkpoint: {args.ckpt}")
     else:
         print("No checkpoint found — using random weights.")
 
     model = model.to(device)
 
-    # Chạy 5 episodes
+    print(f"Eval mode: {mode} | grid: {grid_cols}x{grid_rows} | device: {device}")
+
+    # Chạy episodes
     results = []
-    # Init WandB (optional)
     if wandb is not None:
         try:
             wandb.init(project="chip-placement-eval", reinit=True)
         except Exception:
             wandb = None
-    for i in tqdm(range(5), desc="Evaluating", dynamic_ncols=True):
+    for i in tqdm(range(args.episodes), desc="Evaluating", dynamic_ncols=True):
         r = evaluate_episode(env, model, device=device, greedy=(i == 0))
         results.append(r)
         print(f"Episode {i+1}: reward={r['reward']:+.4f}, HPWL={r['hpwl']:.4f}, "
