@@ -156,11 +156,9 @@ class ChipFloorplanEnv(gym.Env):
         block = self.blocks[block_idx]
  
         # Decode action → grid cell → normalized coords
-        # `action_to_cell` returns (row, col). Keep ordering consistent here.
-        row, col = self.pg.action_to_cell(action)
-        col, row, _, _ = self.pg.block_cells(col, row, block)  # clamped (expects col, row)
-        # `cell_to_xy` expects (row, col)
-        x, y = self.pg.cell_to_xy(row, col)
+        col, row = self.pg.action_to_cell(action)
+        col, row, _, _ = self.pg.block_cells(col, row, block)  # clamped
+        x, y = self.pg.cell_to_xy(col, row)
         # Offset về bottom-left corner
         x -= block.width / 2
         y -= block.height / 2

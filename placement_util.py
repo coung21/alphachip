@@ -93,9 +93,8 @@ class PlacementGrid:
         """Tính (col_end, row_end) của block nếu đặt tại (col, row)
            Clamp để block không vượt quá canvas        
         """
-        import math
-        bw = max(1, math.ceil(block.width / self.cell_w))
-        bh = max(1, math.ceil(block.height / self.cell_h))
+        bw = max(1, round(block.width / self.cell_w))
+        bh = max(1, round(block.height / self.cell_h))
 
         col = min(col, self.cols - bw)
         row = min(row, self.rows - bh)
@@ -123,9 +122,8 @@ class PlacementGrid:
     
     def get_action_mask(self, block: Block) -> np.ndarray:
         """Trả về boolen mask shape (rows*cols)"""
-        import math
-        bw = max(1, math.ceil(block.width / self.cell_w))
-        bh = max(1, math.ceil(block.height / self.cell_h))
+        bw = max(1, round(block.width / self.cell_w))
+        bh = max(1, round(block.height / self.cell_h))
 
         mask = np.zeros((self.rows, self.cols), dtype=bool)
 
