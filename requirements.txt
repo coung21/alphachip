@@ -5,3 +5,4 @@ torch_geometric
 wandb
 matplotlib
 pandas
+tqdm

@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from tqdm.auto import tqdm
 
 # Optional WandB
 try:
@@ -216,7 +217,8 @@ class PPOTrainer:
         print(f"Total updates: {n_updates}, steps/update: {cfg.n_steps * cfg.n_envs}")
 
         start_time = time.time()
-        for update in range(1, n_updates + 1):
+        progress = tqdm(range(1, n_updates + 1), desc="Training", dynamic_ncols=True)
+        for update in progress:
             # Anneal learning rate
             if cfg.anneal_lr:
                 frac = 1.0 - (update - 1) / n_updates
@@ -291,6 +293,13 @@ class PPOTrainer:
                     f"Entropy {stats['entropy']:.4f} | "
                     f"LR {self.optimizer.param_groups[0]['lr']:.2e}"
                 )
+                progress.set_postfix(
+                    step=self.global_step,
+                    sps=f"{sps:.0f}",
+                    reward=f"{mean_r:+.4f}",
+                    hpwl=f"{mean_wl:.4f}",
+                    loss=f"{stats['loss']:.4f}",
+                )
                 if self.use_wandb:
                     wandb.log({
                         "update": update,
@@ -308,6 +317,7 @@ class PPOTrainer:
                 self.save(path)
  
         self.save(os.path.join(cfg.save_path, "final.pt"))
+        progress.close()
         print("Training complete.")
  
     # ── PPO update step ───────────────────────────────────────────────

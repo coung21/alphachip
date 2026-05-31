@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from tqdm.auto import tqdm
 
 from placement_util import Block, Net, compute_hpwl, compute_congestion
 from environment import ChipFloorplanEnv
@@ -55,7 +56,7 @@ def evaluate_episode(
             else:
                 action = torch.distributions.Categorical(logits=logits).sample().item()
 
-            obs, reward, terminated, truncated, info = env.step(action)
+            obs, reward, terminated, truncated, info = env.step(int(action))
             done = terminated or truncated
             total_reward += reward
             actions_taken.append(action)
@@ -77,7 +78,7 @@ def visualize_layout(
     blocks: list,
     nets: list,
     title: str = "Chip Floorplan",
-    save_path: str = None,
+    save_path: str | None = None,
 ):
     """Visualize chip layout với matplotlib."""
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -198,7 +199,7 @@ if __name__ == "__main__":
             wandb.init(project="chip-placement-eval", reinit=True)
         except Exception:
             wandb = None
-    for i in range(5):
+    for i in tqdm(range(5), desc="Evaluating", dynamic_ncols=True):
         r = evaluate_episode(env, model, device=device, greedy=(i == 0))
         results.append(r)
         print(f"Episode {i+1}: reward={r['reward']:+.4f}, HPWL={r['hpwl']:.4f}, "
@@ -222,6 +223,8 @@ if __name__ == "__main__":
             wandb.log({"eval/best_layout": wandb.Image(out_path)})
             art = wandb.Artifact("eval_layout", type="evaluation")
             art.add_file(out_path)
-            wandb.run.log_artifact(art)
+            run = getattr(wandb, "run", None)
+            if run is not None:
+                run.log_artifact(art)
         except Exception as e:
             print(f"WandB logging failed: {e}")
